@@ -1,16 +1,21 @@
 import AppKit
 
 extension Notification.Name {
-    static let clickFloaterEmergencyStop = Notification.Name("ClickFloaterEmergencyStop")
+    static let clickFloaterToggleRunShortcut = Notification.Name("ClickFloaterToggleRunShortcut")
+    static let clickFloaterToggleFloaterShortcut = Notification.Name("ClickFloaterToggleFloaterShortcut")
 }
 
-enum EmergencyStopShortcut {
+enum ToggleRunShortcut {
     static func matches(_ event: NSEvent) -> Bool {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        let stopFlags: NSEvent.ModifierFlags = [.command, .option, .control]
+        return event.keyCode == 47 && flags == [.command] // . with cmd
+    }
+}
 
-        if event.keyCode == 53 { return true } // Escape
-        if event.keyCode == 47 && flags.contains(stopFlags) { return true } // . with cmd+opt+ctrl
-        return false
+enum ToggleFloaterShortcut {
+    static func matches(_ event: NSEvent) -> Bool {
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        let chars = (event.charactersIgnoringModifiers ?? "").lowercased()
+        return flags == [.command] && (event.keyCode == 44 || chars == "/" || chars == "?")
     }
 }

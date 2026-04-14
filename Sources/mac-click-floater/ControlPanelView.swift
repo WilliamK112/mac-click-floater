@@ -5,13 +5,26 @@ struct ControlPanelView: View {
     @State private var showDebugTools = ProcessInfo.processInfo.environment["CLICK_FLOATER_SHOW_DEBUG"] == "1" || ProcessInfo.processInfo.environment["CLICK_FLOATER_SELF_TEST"] == "1"
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Click Floater")
-                    .font(.title2.weight(.bold))
-                Text("做一个浮在屏幕上的连点器。先加点，再把红点拖到目标位置。")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Click Floater")
+                        .font(.title3.weight(.bold))
+                    Text("收起时是悬浮球，点开后再显示控制面板。")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                Button {
+                    store.setCollapsed(true)
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title3)
+                }
+                .buttonStyle(.plain)
+                .help("收起到悬浮球")
             }
 
             HStack(spacing: 10) {
@@ -28,13 +41,6 @@ struct ControlPanelView: View {
                 }
 
                 Spacer()
-
-                Button(showDebugTools ? "隐藏测试区" : "显示测试区") {
-                    showDebugTools.toggle()
-                }
-                .buttonStyle(.borderless)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
             }
 
             HStack(spacing: 10) {
@@ -53,12 +59,12 @@ struct ControlPanelView: View {
                 }
             }
 
+            if showDebugTools {
+                DebugClickPad()
+            }
+
             ScrollView {
                 VStack(spacing: 10) {
-                    if showDebugTools {
-                        DebugClickPad()
-                    }
-
                     if store.points.isEmpty {
                         EmptyStateView()
                     } else {
@@ -67,6 +73,7 @@ struct ControlPanelView: View {
                                 index: index + 1,
                                 point: binding(for: point.id),
                                 isRunning: store.isPointRunning(point.id),
+                                isSelected: store.selectedPointID == point.id,
                                 onToggleRun: {
                                     store.togglePointRunning(id: point.id)
                                 }
@@ -80,18 +87,29 @@ struct ControlPanelView: View {
             }
             .frame(maxHeight: .infinity)
 
-            VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Button(showDebugTools ? "隐藏测试区" : "显示测试区") {
+                    showDebugTools.toggle()
+                }
+                .buttonStyle(.borderless)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+
+                Spacer()
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
                 Text(store.statusMessage)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
 
-                Text("提示：第一次使用需要在系统设置里允许辅助功能权限。运行中红点会穿透到底下内容，按 Esc 可立刻停止。")
+                Text("提示：运行中红点会穿透到底下内容，按 Esc 可立刻停止。")
                     .font(.footnote)
                     .foregroundStyle(.tertiary)
             }
         }
-        .padding(18)
-        .frame(minWidth: 460, minHeight: 560)
+        .padding(16)
+        .frame(minWidth: 340, minHeight: 420)
     }
 
     private func binding(for id: UUID) -> Binding<ClickPoint> {
@@ -103,10 +121,54 @@ struct ControlPanelView: View {
     }
 }
 
+struct FloatingOrbView: View {
+    @EnvironmentObject private var store: ClickPointStore
+
+    var body: some View {
+        Button {
+            store.setCollapsed(false)
+        } label: {
+            ZStack {
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: store.isRunning
+                                ? [Color.orange, Color.red.opacity(0.9)]
+                                : [Color.red, Color.pink.opacity(0.9)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+
+                Image(systemName: store.isRunning ? "pause.fill" : "circle.grid.2x1.fill")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(.white)
+            }
+            .frame(width: 56, height: 56)
+            .overlay(
+                Circle().stroke(Color.white.opacity(0.9), lineWidth: 2)
+            )
+            .shadow(color: .black.opacity(0.25), radius: 8, y: 3)
+            .overlay(alignment: .bottomTrailing) {
+                if store.isRunning {
+                    Circle()
+                        .fill(Color.green)
+                        .frame(width: 12, height: 12)
+                        .overlay(Circle().stroke(Color.white, lineWidth: 2))
+                        .offset(x: -2, y: -2)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .help("点击展开控制面板")
+    }
+}
+
 private struct PointEditorRow: View {
     let index: Int
     @Binding var point: ClickPoint
     let isRunning: Bool
+    let isSelected: Bool
     let onToggleRun: () -> Void
     let onRemove: () -> Void
 
@@ -168,15 +230,13 @@ private struct PointEditorRow: View {
                 }
             }
 
-            HStack(spacing: 10) {
-                Button(action: onToggleRun) {
-                    Label(isRunning ? "停止此点" : "启动此点", systemImage: isRunning ? "stop.circle.fill" : "play.circle.fill")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(isRunning ? .red : .accentColor)
-                .disabled(!point.isEnabled && !isRunning)
+            Button(action: onToggleRun) {
+                Label(isRunning ? "停止此点" : "启动此点", systemImage: isRunning ? "stop.circle.fill" : "play.circle.fill")
+                    .frame(maxWidth: .infinity)
             }
+            .buttonStyle(.borderedProminent)
+            .tint(isRunning ? .red : .accentColor)
+            .disabled(!point.isEnabled && !isRunning)
         }
         .padding(12)
         .background(
@@ -185,7 +245,7 @@ private struct PointEditorRow: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(Color.primary.opacity(0.06), lineWidth: 1)
+                .stroke(isSelected ? Color.accentColor.opacity(0.8) : Color.primary.opacity(0.06), lineWidth: isSelected ? 2 : 1)
         )
     }
 }
@@ -292,17 +352,17 @@ private struct EmptyStateView: View {
     var body: some View {
         VStack(spacing: 12) {
             Image(systemName: "cursorarrow.motionlines.click")
-                .font(.system(size: 34))
+                .font(.system(size: 30))
                 .foregroundStyle(.secondary)
             Text("还没有点击点")
                 .font(.headline)
-            Text("点“新增点击点”后，屏幕中间会出现一个红色圆点。把它拖到你想自动点击的位置，再设定间隔和运行时长。")
+            Text("点“新增点击点”后，屏幕中间会出现一个红色圆点。把红点拖到你想自动点击的位置，再设定间隔和运行时长。")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
-        .padding(28)
+        .padding(24)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(Color(nsColor: .controlBackgroundColor))

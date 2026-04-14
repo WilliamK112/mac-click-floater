@@ -16,7 +16,13 @@ final class ClickPointStore: ObservableObject {
     @Published var accessibilityGranted = AccessibilityPermission.isGranted()
     @Published var statusMessage = "先点一次“检查权限”，允许辅助功能后再开始。"
     @Published var debugClickCount = 0
+    @Published var windowState = FloaterWindowState() {
+        didSet {
+            persistWindowState()
+        }
+    }
     @Published private(set) var runningPointIDs: Set<UUID> = []
+    @Published var selectedPointID: UUID?
 
     var isRunning: Bool {
         !runningPointIDs.isEmpty
@@ -32,8 +38,15 @@ final class ClickPointStore: ObservableObject {
     init() {
         NotificationCenter.default.addObserver(
             self,
-            selector: #selector(handleEmergencyStopNotification),
-            name: .clickFloaterEmergencyStop,
+            selector: #selector(handleToggleRunShortcutNotification),
+            name: .clickFloaterToggleRunShortcut,
+            object: nil
+        )
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleToggleFloaterShortcutNotification),
+            name: .clickFloaterToggleFloaterShortcut,
             object: nil
         )
 
@@ -172,13 +185,29 @@ final class ClickPointStore: ObservableObject {
         }
     }
 
-    @objc private func handleEmergencyStopNotification() {
-        emergencyStop()
+    @objc private func handleToggleRunShortcutNotification() {
+        toggleRunFromShortcut()
     }
 
-    func emergencyStop() {
-        stopClicking()
-        statusMessage = "已紧急停止。快捷键: Esc 或 Control + Option + Command + ."
+    @objc private func handleToggleFloaterShortcutNotification() {
+        toggleFloaterVisibilityFromShortcut()
+    }
+
+    func toggleRunFromShortcut() {
+        if isRunning {
+            stopClicking()
+            statusMessage = "已暂停。快捷键: Command + . 可重新开始, Command + / 显示或隐藏悬浮球。"
+        } else {
+            startAllPoints()
+        }
+    }
+
+    func toggleFloaterVisibilityFromShortcut() {
+        if windowState.isCollapsed {
+            windowState.isCollapsed = false
+        } else {
+            windowState.isCollapsed = true
+        }
     }
 
     func isPointRunning(_ id: UUID) -> Bool {
@@ -208,7 +237,7 @@ final class ClickPointStore: ObservableObject {
         }
         syncMarkerWindows()
         restartTimers()
-        statusMessage = "全部点击点已开始。运行中红点会穿透到底下内容，按 Esc 可立刻停止。"
+        statusMessage = "全部点击点已开始。快捷键: Command + . 暂停或开始, Command + / 显示或隐藏悬浮球。"
     }
 
     func stopAllPoints() {
@@ -222,7 +251,7 @@ final class ClickPointStore: ObservableObject {
         }
         stopWorkItems.removeAll()
         syncMarkerWindows()
-        statusMessage = "自动点击已停止。"
+        statusMessage = "自动点击已停止。快捷键: Command + . 可重新开始, Command + / 显示或隐藏悬浮球。"
     }
 
     func startPoint(id: UUID) {
@@ -260,6 +289,24 @@ final class ClickPointStore: ObservableObject {
         } else {
             startPoint(id: id)
         }
+    }
+
+    func nudgeDuration(id: UUID, deltaSeconds: Int) {
+        guard let index = points.firstIndex(where: { $0.id == id }) else { return }
+        var point = points[index]
+        let current = Int(point.durationTimeInterval)
+        let next = max(0, current + deltaSeconds)
+        point.durationHours = next / 3600
+        point.durationMinutes = (next % 3600) / 60
+        point.durationSeconds = next % 60
+        updatePoint(point)
+        statusMessage = "已调整 \(point.name.isEmpty ? "该点" : point.name) 的运行时长为 \(point.durationDescription)。"
+    }
+
+    func focusPointInPanel(id: UUID) {
+        selectedPointID = id
+        windowState.isCollapsed = false
+        statusMessage = "已打开 \(points.first(where: { $0.id == id })?.name ?? "该点") 的设置。"
     }
 
     private func scheduleStopForPoint(_ point: ClickPoint) {
@@ -318,11 +365,35 @@ final class ClickPointStore: ObservableObject {
             if let controller = markerWindows[point.id] {
                 controller.update(point: point, isRunning: pointIsRunning)
             } else {
-                let controller = MarkerWindowController(point: point) { [weak self] id, newPosition in
-                    Task { @MainActor [weak self] in
-                        self?.movePoint(id: id, to: newPosition)
+                let controller = MarkerWindowController(
+                    point: point,
+                    isRunning: pointIsRunning,
+                    onMove: { [weak self] id, newPosition in
+                        Task { @MainActor [weak self] in
+                            self?.movePoint(id: id, to: newPosition)
+                        }
+                    },
+                    onToggleRun: { [weak self] id in
+                        Task { @MainActor [weak self] in
+                            self?.togglePointRunning(id: id)
+                        }
+                    },
+                    onNudgeDuration: { [weak self] id, deltaSeconds in
+                        Task { @MainActor [weak self] in
+                            self?.nudgeDuration(id: id, deltaSeconds: deltaSeconds)
+                        }
+                    },
+                    onOpenSettings: { [weak self] id in
+                        Task { @MainActor [weak self] in
+                            self?.focusPointInPanel(id: id)
+                        }
+                    },
+                    onRemove: { [weak self] id in
+                        Task { @MainActor [weak self] in
+                            self?.removePoint(id: id)
+                        }
                     }
-                }
+                )
                 controller.update(point: point, isRunning: pointIsRunning)
                 markerWindows[point.id] = controller
             }
@@ -342,6 +413,10 @@ final class ClickPointStore: ObservableObject {
         baseSupportDirectory().appending(path: "self-test.json")
     }
 
+    private func windowStateURL() -> URL {
+        baseSupportDirectory().appending(path: "window-state.json")
+    }
+
     private func persist() {
         let url = persistenceURL()
         do {
@@ -350,6 +425,43 @@ final class ClickPointStore: ObservableObject {
             try data.write(to: url)
         } catch {
             statusMessage = "保存点击点失败: \(error.localizedDescription)"
+        }
+    }
+
+    func setCollapsed(_ collapsed: Bool) {
+        windowState.isCollapsed = collapsed
+    }
+
+    func updateOrbCenter(_ center: CGPoint) {
+        windowState.orbCenterX = center.x
+        windowState.orbCenterY = center.y
+    }
+
+    func persistExpandedSize(_ size: CGSize) {
+        windowState.expandedWidth = max(300, size.width)
+        windowState.expandedHeight = max(360, size.height)
+    }
+
+    func preferredOrbCenter() -> CGPoint {
+        if let x = windowState.orbCenterX, let y = windowState.orbCenterY {
+            let point = CGPoint(x: x, y: y)
+            if NSScreen.screens.contains(where: { $0.visibleFrame.insetBy(dx: 24, dy: 24).contains(point) }) {
+                return point
+            }
+        }
+
+        let screen = preferredPlacementScreen().visibleFrame
+        return CGPoint(x: screen.maxX - 34, y: screen.midY)
+    }
+
+    private func persistWindowState() {
+        let url = windowStateURL()
+        do {
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            let data = try JSONEncoder().encode(windowState)
+            try data.write(to: url)
+        } catch {
+            statusMessage = "保存窗口状态失败: \(error.localizedDescription)"
         }
     }
 
@@ -373,11 +485,16 @@ final class ClickPointStore: ObservableObject {
 
     private func load() {
         let url = persistenceURL()
-        guard let data = try? Data(contentsOf: url), let decoded = try? JSONDecoder().decode([ClickPoint].self, from: data) else {
+        if let data = try? Data(contentsOf: url), let decoded = try? JSONDecoder().decode([ClickPoint].self, from: data) {
+            points = decoded.map { sanitize($0) }
+        } else {
             points = []
-            return
         }
-        points = decoded.map { sanitize($0) }
+
+        let stateURL = windowStateURL()
+        if let data = try? Data(contentsOf: stateURL), let decoded = try? JSONDecoder().decode(FloaterWindowState.self, from: data) {
+            windowState = decoded
+        }
     }
 
     private func preferredPlacementScreen() -> NSScreen {

@@ -1,6 +1,14 @@
 import Foundation
 import CoreGraphics
 
+struct FloaterWindowState: Codable, Equatable {
+    var isCollapsed: Bool = true
+    var orbCenterX: Double?
+    var orbCenterY: Double?
+    var expandedWidth: Double = 360
+    var expandedHeight: Double = 520
+}
+
 struct ClickPoint: Identifiable, Codable, Equatable {
     var id: UUID = UUID()
     var name: String

@@ -13,7 +13,7 @@ A floating auto-clicker prototype for macOS.
 - Start all / stop all controls
 - Running markers switch into click-through mode so they do not block the real target underneath
 - The mouse is moved back to its original location immediately after each click attempt
-- Emergency stop shortcut support (`Esc`)
+- Global shortcuts: `Command + .` to start/pause, `Command + /` to show/hide the floater
 - Click point positions are persisted between launches
 
 ## How to run
