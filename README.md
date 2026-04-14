@@ -1,53 +1,53 @@
 # Click Floater
 
-一个给 macOS 用的浮动连点器原型。
+A floating auto-clicker prototype for macOS.
 
-## 现在已经有的功能
+## Current features
 
-- 浮动控制面板
-- 新增点击点后，屏幕中间会出现一个红色浮动点
-- 红点可以拖到屏幕任意位置
-- 每个点可以单独设置名字、点击间隔、启用/停用
-- 每个点可以单独启动 / 停止
-- 每个点可以设置独立运行时长（时 / 分 / 秒）
-- 支持开始全部 / 停止全部
-- 运行时红点会切成穿透状态，避免点到浮点本身
-- 点击后鼠标会尽量回到调用前的位置
-- 支持紧急停止快捷键（Esc）
-- 自动保存点击点位置，下次启动还在
+- Floating control panel
+- New click points spawn as draggable floating markers
+- Markers can be dragged anywhere on screen
+- Each point can have its own name, click interval, and enabled state
+- Each point can be started or stopped independently
+- Each point can have its own run duration in hours, minutes, and seconds
+- Start all / stop all controls
+- Running markers switch into click-through mode so they do not block the real target underneath
+- The mouse is moved back to its original location immediately after each click attempt
+- Emergency stop shortcut support (`Esc`)
+- Click point positions are persisted between launches
 
-## 运行方法
+## How to run
 
-### 方式 1：双击运行脚本
+### Option 1, double-click the launcher
 
-双击项目里的：
+Double-click:
 
 - `run-click-floater.command`
 
-### 方式 2：终端运行
+### Option 2, run from Terminal
 
 ```bash
 cd /Users/William/.openclaw/workspace/mac-click-floater
 swift run
 ```
 
-## 第一次使用要做的事
+## First-time setup
 
-1. 启动后点击“检查权限”
-2. 到 **系统设置 > 隐私与安全性 > 辅助功能**
-3. 允许这个程序控制你的 Mac
-4. 回到工具里点击“开始”
+1. Launch the app and click `Check Permissions`
+2. Open **System Settings > Privacy & Security > Accessibility**
+3. Allow the app to control your Mac
+4. Return to the app and click `Start`
 
-## 当前限制
+## Current limitations
 
-- 现在是“按点点击”的版本，不是“框选区域内随机点击”的版本
-- 系统级自动点击仍然会在点击瞬间接管鼠标，暂时还做不到完全无感
-- 更复杂的调度策略（例如延迟启动、分组排程）还没加
+- This is still a point-based clicker, not an area-based random clicker
+- System-level clicking still takes over the mouse briefly at click time, so it is not fully invisible yet
+- More advanced scheduling, such as delayed starts or grouped patterns, is not implemented yet
 
-## 下一步可以继续加
+## Planned improvements
 
-- 区域点击模式（拖一个框，而不是单点）
-- 点击次数上限
-- 左键 / 右键切换
-- 每个点的延迟启动 / 错峰调度
-- 菜单栏模式
+- Area click mode instead of single-point only
+- Click count limits
+- Left-click / right-click switching
+- Per-point delayed start and staggered scheduling
+- Menu bar mode
